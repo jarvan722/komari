@@ -1,66 +1,164 @@
-# Komari 独立一键安装脚本
+# Komari 一键 HTTPS 安装脚本
 
-一个面向 Debian/Ubuntu 等 systemd Linux 的 Komari 一键部署脚本。
+适用于 Debian/Ubuntu + systemd VPS 的 Komari Monitor 一键安装器。
+
+本项目重点针对已经安装 Nginx、Caddy 或其他服务的 VPS 做兼容处理：**优先复用现有 Nginx，避免 Nginx 与 Caddy 同时抢占 80/443 端口。**
 
 ## 一键安装
 
 ```bash
-bash <(curl -Ls https://raw.githubusercontent.com/jarvan722/komari/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/jarvan722/komari/main/install-https.sh)
 ```
 
-安装时会询问：
+安装过程中会交互询问：
 
-- Komari 面板域名/IP
-- Komari 后端端口（默认 `25774`）
-- 管理快捷命令（默认 `km`）
-- 是否自动申请 HTTPS
+- Komari 内部端口，默认 `25774`
+- HTTPS 自定义域名
+- 是否确认安装
 
-## 最终部署结构
-
-输入你自己的域名，例如 `monitor.example.com`，脚本会将 Komari 后端绑定到：
+例如：
 
 ```text
-127.0.0.1:<自定义端口>
+Komari 内部端口 [25774]: 25774
+HTTPS 域名（例如 jk.example.com）：jk.example.com
 ```
 
-并配置：
+## 推荐部署结构
+
+### 已有 Nginx
+
+如果 VPS 已经运行 Nginx，安装器会自动使用 Nginx：
 
 ```text
-HTTPS 域名
+                 Internet
+                    │
+                    ▼
+              Nginx :80/:443
+                    │
+                    ▼
+          https://your-domain.com
+                    │
+                    ▼
+          127.0.0.1:25774
+                    │
+                    ▼
+                  Komari
+```
+
+不会再启动 Caddy，因此不会出现：
+
+```text
+listen tcp :80: bind: address already in use
+```
+
+### 没有 Nginx
+
+如果系统没有正在运行的 Nginx，则自动安装并使用 Caddy：
+
+```text
+Internet
    ↓
-Nginx 443
+Caddy :80/:443
+   ↓
+HTTPS 自动证书
    ↓
 127.0.0.1:<自定义端口>
    ↓
 Komari
 ```
 
-域名模式下会尝试自动使用 Certbot/Let's Encrypt 配置 HTTPS，并将 HTTP 重定向到 HTTPS。
+## HTTPS
 
-## 隐私与兼容性
+### Nginx 模式
 
-- 仓库不包含任何用户个人域名、IP、Token 或密码。
-- 域名、端口和快捷命令只保存在安装目标服务器的 `/etc/komari-install.conf`。
-- 不修改其他 Nginx `server` 配置，只创建或更新 `/etc/nginx/conf.d/komari.conf`。
-- 如果系统没有 Nginx，会安装 Nginx；如果已有 Nginx，则直接复用。
-- Komari 后端默认只监听 `127.0.0.1`，不会直接暴露后端端口。
-- 不使用 `sb`、`ssh`、`bash`、`sh` 等常用快捷命令作为默认管理命令。
+安装器会自动：
+
+1. 创建 Komari Nginx 反向代理配置
+2. 安装 Certbot（如果系统没有）
+3. 申请 Let's Encrypt 证书
+4. 配置 HTTP → HTTPS 跳转
+5. 自动 reload Nginx
+
+配置文件：
+
+```text
+/etc/nginx/conf.d/komari.conf
+```
+
+### Caddy 模式
+
+Caddy 自动申请和续期 HTTPS 证书。
+
+配置文件：
+
+```text
+/etc/caddy/Caddyfile
+```
+
+## 安全设计
+
+Komari 后端默认只监听：
+
+```text
+127.0.0.1:<端口>
+```
+
+例如：
+
+```text
+127.0.0.1:25774
+```
+
+因此**不需要把 25774 开放到公网**。
+
+公网只需要放行：
+
+```text
+TCP 80
+TCP 443
+```
+
+如果启用了 UFW，安装器会自动放行 80/443。
 
 ## 管理菜单
 
-默认快捷命令：
+安装完成后：
 
 ```bash
-km
+komari-menu
 ```
 
-菜单支持状态、启动、停止、重启、日志、端口管理、Agent、更新、HTTPS 检查/续期和卸载等操作。
+菜单包含：
 
-## Agent
+```text
+1. 查看 Komari 状态
+2. 启动 Komari
+3. 停止 Komari
+4. 重启 Komari
+5. 查看 Komari 日志
+6. 查看监听端口
+7. 查看 Web 服务状态
+8. 重启 Web 服务
+9. 查看 Web 服务日志
+10. 查看 HTTPS 配置
+11. 查看 Komari 服务配置
+```
 
-在 `km` 菜单选择 Agent 安装/配置，并输入 Komari 面板生成的 Agent Token。支持设置每月流量统计重置日期。
+快速查看状态：
 
-## 服务管理
+```bash
+komari-status
+```
+
+## Komari 服务
+
+服务文件：
+
+```text
+/etc/systemd/system/komari.service
+```
+
+常用命令：
 
 ```bash
 systemctl status komari --no-pager -l
@@ -74,8 +172,108 @@ journalctl -u komari -f
 /opt/komari
 ```
 
-## 注意
+Komari 程序：
 
-第一次使用域名部署时，请确保 DNS A/AAAA 记录已经指向服务器，并且公网 TCP 80/443 可访问，否则 Let's Encrypt 无法完成 HTTP 验证。
+```text
+/opt/komari/komari
+```
 
-本仓库是通用安装器。请勿在公开仓库提交自己的域名、IP、Token、密码或其他敏感信息。
+## DNS 要求
+
+使用 HTTPS 域名之前，请先将域名解析到 VPS：
+
+```text
+your-domain.com → VPS IP
+```
+
+如果存在 AAAA 记录，请确保 IPv6 也确实指向该 VPS；否则建议删除错误的 AAAA 记录。
+
+同时确保 VPS 服务商安全组/防火墙允许：
+
+```text
+TCP 80
+TCP 443
+```
+
+## 与现有 Nginx/Caddy 共存
+
+脚本会自动检测 Web 服务：
+
+- 已有 Nginx → 优先使用 Nginx
+- 没有 Nginx → 使用 Caddy
+- Komari 后端不直接暴露公网
+- 修改配置前会尽量创建备份
+
+如果你已经有其他网站，请特别注意域名不要与现有 Nginx/Caddy 网站配置冲突。
+
+## 故障排查
+
+### Komari 状态
+
+```bash
+systemctl status komari --no-pager -l
+```
+
+### Komari 日志
+
+```bash
+journalctl -u komari -n 100 --no-pager
+```
+
+### Nginx 状态
+
+```bash
+systemctl status nginx --no-pager -l
+```
+
+### Nginx 配置检查
+
+```bash
+nginx -t
+```
+
+### Caddy 配置检查
+
+```bash
+caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+### 查看 80/443/Komari 端口
+
+```bash
+ss -lntp | grep -E ':(80|443|25774)[[:space:]]'
+```
+
+如果使用了其他自定义端口，将 `25774` 替换成实际端口。
+
+## 隐私
+
+请不要向公开 GitHub 仓库提交：
+
+- 个人域名
+- VPS IP
+- Komari Agent Token
+- 密码
+- 私钥
+- API Token
+- 其他敏感信息
+
+安装时输入的域名和端口不会写入本 README。
+
+## 项目文件
+
+主要安装脚本：
+
+```text
+install-https.sh
+```
+
+一键安装：
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/jarvan722/komari/main/install-https.sh)
+```
+
+## License
+
+本仓库中的安装脚本按仓库实际许可证使用。Komari 本身请遵循其上游项目的许可证和使用条款。
