@@ -8,6 +8,7 @@ INSTALL_DIR=/opt/komari
 BINARY="$INSTALL_DIR/komari"
 SERVICE=/etc/systemd/system/komari.service
 DEFAULT_PORT=25774
+CADDY_HTTPS_PORT=2087
 PORT=""
 DOMAIN=""
 
@@ -66,7 +67,7 @@ done
 
 echo
 echo "Komari：127.0.0.1:${PORT}"
-echo "面板：https://${DOMAIN}"
+if [[ "${WEB_SERVICE}" == caddy ]]; then echo "面板：https://${DOMAIN}:${CADDY_HTTPS_PORT}"; else echo "面板：https://${DOMAIN}"; fi
 echo
 read -r -p '确认安装？[Y/n]: ' CONFIRM
 CONFIRM=${CONFIRM:-Y}
@@ -162,7 +163,11 @@ else
   mkdir -p /etc/caddy
   [[ -f "$CADDYFILE" ]] && cp -a "$CADDYFILE" "$CADDYFILE.backup.$(date +%Y%m%d-%H%M%S)"
   cat > "$CADDYFILE" <<EOF
-${DOMAIN} {
+{
+    https_port ${CADDY_HTTPS_PORT}
+}
+
+https://${DOMAIN}:${CADDY_HTTPS_PORT} {
     encode gzip
     reverse_proxy 127.0.0.1:${PORT}
 }
@@ -179,7 +184,8 @@ fi
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q 'Status: active'; then
   ufw allow 80/tcp >/dev/null || true
   ufw allow 443/tcp >/dev/null || true
-  ok 'UFW 已放行 80/443。'
+  if [[ "${WEB_SERVICE}" == caddy ]]; then ufw allow ${CADDY_HTTPS_PORT}/tcp >/dev/null || true; fi
+  ok 'UFW 已放行 Web 端口。'
 fi
 
 cat > /usr/local/bin/komari-menu <<EOF
@@ -216,7 +222,7 @@ while true; do
   9) journalctl -u ${WEB_SERVICE} -f ;;
  10) cat /etc/systemd/system/komari.service; read -r -p '回车继续...' ;;
  11) if [[ '${WEB_SERVICE}' == nginx ]]; then cat /etc/nginx/conf.d/komari.conf; else cat /etc/caddy/Caddyfile; fi; read -r -p '回车继续...' ;;
- 12) curl -I -L --max-time 15 https://${DOMAIN} || true; read -r -p '回车继续...' ;;
+ 12) curl -I -L --max-time 15 https://${DOMAIN}:${CADDY_HTTPS_PORT} || true; read -r -p '回车继续...' ;;
   0) exit 0 ;;
   *) echo '无效选项'; sleep 1 ;;
  esac
@@ -251,5 +257,5 @@ echo "IP：${IP:-请确认}"
 echo
 echo '管理：komari-menu'
 echo '状态：komari-status'
-echo "注意：DNS ${DOMAIN} 必须解析到此 VPS，安全组放行 TCP 80/443。"
+if [[ "${WEB_SERVICE}" == caddy ]]; then echo "注意：DNS ${DOMAIN} 必须解析到此 VPS，安全组放行 TCP 80 和 ${CADDY_HTTPS_PORT}。"; else echo "注意：DNS ${DOMAIN} 必须解析到此 VPS，安全组放行 TCP 80/443。"; fi
 echo -e "${GREEN}============================================================${NC}"
