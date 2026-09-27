@@ -68,7 +68,7 @@ done
 
 echo
 echo "Komari：127.0.0.1:${PORT}"
-if [[ "${WEB_SERVICE}" == caddy ]]; then echo "面板：https://${DOMAIN}:${CADDY_HTTPS_PORT}"; else echo "面板：https://${DOMAIN}"; fi
+echo "面板：https://${DOMAIN}:${CADDY_HTTPS_PORT}"
 echo
 read -r -p '确认安装？[Y/n]: ' CONFIRM
 CONFIRM=${CONFIRM:-Y}
