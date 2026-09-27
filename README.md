@@ -2,7 +2,7 @@
 
 适用于 Debian/Ubuntu + systemd VPS 的 Komari Monitor 一键安装器。
 
-本项目重点针对已经安装 Nginx、Caddy 或其他服务的 VPS 做兼容处理：**优先复用现有 Nginx，避免 Nginx 与 Caddy 同时抢占 80/443 端口。**
+本项目重点针对已经安装 Nginx、Caddy 或其他服务的 VPS 做兼容处理：**优先复用现有 Nginx，避免 Nginx 与 Caddy 同时抢占 80/443 端口；Caddy 模式固定使用 HTTPS `2087`。**
 
 ## 一键安装
 
@@ -58,7 +58,7 @@ listen tcp :80: bind: address already in use
 ```text
 Internet
    ↓
-Caddy :80/:443
+Caddy :2087
    ↓
 HTTPS 自动证书
    ↓
@@ -87,7 +87,15 @@ Komari
 
 ### Caddy 模式
 
-Caddy 自动申请和续期 HTTPS 证书。
+Caddy 自动申请和续期 HTTPS 证书，**HTTPS 服务端口固定为 `2087`**。
+
+访问地址：
+
+```text
+https://your-domain.com:2087
+```
+
+Caddy 使用 `80` 进行 HTTP/ACME 验证，并使用 `2087` 提供 HTTPS，因此不会监听 `443`。
 
 配置文件：
 
@@ -111,14 +119,21 @@ Komari 后端默认只监听：
 
 因此**不需要把 25774 开放到公网**。
 
-公网只需要放行：
+Nginx 模式公网需要放行：
 
 ```text
 TCP 80
 TCP 443
 ```
 
-如果启用了 UFW，安装器会自动放行 80/443。
+Caddy 模式公网需要放行：
+
+```text
+TCP 80
+TCP 2087
+```
+
+如果启用了 UFW，安装器会按实际 Web 模式自动放行端口。
 
 ## 管理菜单
 
@@ -188,11 +203,18 @@ your-domain.com → VPS IP
 
 如果存在 AAAA 记录，请确保 IPv6 也确实指向该 VPS；否则建议删除错误的 AAAA 记录。
 
-同时确保 VPS 服务商安全组/防火墙允许：
+同时确保 VPS 服务商安全组/防火墙允许对应端口：
 
+Nginx 模式：
 ```text
 TCP 80
 TCP 443
+```
+
+Caddy 模式：
+```text
+TCP 80
+TCP 2087
 ```
 
 ## 与现有 Nginx/Caddy 共存
@@ -238,11 +260,13 @@ nginx -t
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
-### 查看 80/443/Komari 端口
+### 查看 Web/Komari 端口
 
 ```bash
-ss -lntp | grep -E ':(80|443|25774)[[:space:]]'
+ss -lntp | grep -E ':(80|443|2087|25774)[[:space:]]'
 ```
+
+Caddy 模式下重点检查 `80` 和 `2087`；Nginx 模式下重点检查 `80` 和 `443`。
 
 如果使用了其他自定义端口，将 `25774` 替换成实际端口。
 
