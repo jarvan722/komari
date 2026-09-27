@@ -2,7 +2,7 @@
 
 适用于 Debian/Ubuntu + systemd VPS 的 Komari Monitor 一键安装器。
 
-本项目重点针对已经安装 Nginx、Caddy 或其他服务的 VPS 做兼容处理：**优先复用现有 Nginx，避免 Nginx 与 Caddy 同时抢占 80/443 端口；Caddy 模式固定使用 HTTPS `2087`。**
+本项目重点针对已经安装 Nginx、Caddy 或其他服务的 VPS 做兼容处理：**443 专门预留给 VLESS Reality；Komari 固定使用 Caddy HTTPS `2087`。脚本会检测现有 Nginx/Caddy，避免 Web 服务抢占同一端口。**
 
 ## 一键安装
 
@@ -25,47 +25,25 @@ HTTPS 域名（例如 jk.example.com）：jk.example.com
 
 ## 推荐部署结构
 
-### 已有 Nginx
+### 443 专用于 VLESS Reality
 
-如果 VPS 已经运行 Nginx，安装器会自动使用 Nginx：
+无论系统是否已有 Nginx，Komari 都不使用公网 443：
 
 ```text
                  Internet
-                    │
-                    ▼
-              Nginx :80/:443
-                    │
-                    ▼
-          https://your-domain.com
-                    │
-                    ▼
-          127.0.0.1:25774
-                    │
-                    ▼
-                  Komari
+          ┌──────────┴──────────┐
+          │                     │
+     VLESS Reality           Komari
+        :443                  :2087
+                                │
+                              Caddy
+                                │
+                         127.0.0.1:25774
 ```
 
-不会再启动 Caddy，因此不会出现：
+如果 VPS 已运行 Nginx，脚本只让 Nginx 为指定域名提供 80/ACME HTTP-01 验证，**不会配置 Nginx 的 443 反代**，避免与 Reality 冲突。
 
-```text
-listen tcp :80: bind: address already in use
-```
-
-### 没有 Nginx
-
-如果系统没有正在运行的 Nginx，则自动安装并使用 Caddy：
-
-```text
-Internet
-   ↓
-Caddy :2087
-   ↓
-HTTPS 自动证书
-   ↓
-127.0.0.1:<自定义端口>
-   ↓
-Komari
-```
+如果没有 Nginx，则由 Caddy 负责 80/ACME，并由 Caddy 在 2087 提供 Komari HTTPS。
 
 ## HTTPS
 
@@ -95,7 +73,7 @@ Caddy 自动申请和续期 HTTPS 证书，**HTTPS 服务端口固定为 `2087`*
 https://your-domain.com:2087
 ```
 
-Caddy 使用 `80` 进行 HTTP/ACME 验证，并使用 `2087` 提供 HTTPS，因此不会监听 `443`。
+Caddy 使用 `80` 进行 HTTP/ACME 验证，并使用 `2087` 提供 HTTPS，因此不会监听 `443`。如果 Nginx 已占用 80，则证书由 Certbot 通过 Nginx Webroot 申请，证书交给 Caddy 使用。
 
 配置文件：
 
@@ -117,23 +95,16 @@ Komari 后端默认只监听：
 127.0.0.1:25774
 ```
 
-因此**不需要把 25774 开放到公网**。
+因此**不需要把 Komari 后端端口开放到公网**。
 
-Nginx 模式公网需要放行：
-
-```text
-TCP 80
-TCP 443
-```
-
-Caddy 模式公网需要放行：
+Komari 部署需要放行：
 
 ```text
 TCP 80
 TCP 2087
 ```
 
-如果启用了 UFW，安装器会按实际 Web 模式自动放行端口。
+**TCP 443 不由 Komari 安装器占用，保留给 VLESS Reality。**
 
 ## 管理菜单
 
@@ -221,8 +192,9 @@ TCP 2087
 
 脚本会自动检测 Web 服务：
 
-- 已有 Nginx → 优先使用 Nginx
-- 没有 Nginx → 使用 Caddy
+- 443 始终预留给 VLESS Reality
+- 已有 Nginx → Nginx 仅辅助 80/ACME，不接管 443
+- 没有 Nginx → Caddy 负责 80/2087
 - Komari 后端不直接暴露公网
 - 修改配置前会尽量创建备份
 
