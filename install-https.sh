@@ -46,7 +46,7 @@ case "$ARCH" in
 esac
 
 while true; do
-  read -r -p "Komari 内部端口 [${DEFAULT_PORT}]: " PORT
+  read -r -p "Komari 内部端口 [${DEFAULT_PORT}]: " PORT </dev/tty
   PORT=${PORT:-$DEFAULT_PORT}
   [[ "$PORT" =~ ^[0-9]+$ ]] && ((PORT>=1 && PORT<=65535)) && break
   warn '端口必须为 1-65535。'
@@ -55,12 +55,12 @@ done
 if ss -lnt 2>/dev/null | grep -Eq ":${PORT}[[:space:]]"; then
   warn "端口 ${PORT} 已被占用："
   ss -lntp 2>/dev/null | grep -E ":${PORT}[[:space:]]" || true
-  read -r -p '仍然继续？[y/N]: ' A
+  read -r -p '仍然继续？[y/N]: ' A </dev/tty
   [[ "$A" =~ ^[Yy]$ ]] || die '已取消。'
 fi
 
 while true; do
-  read -r -p 'HTTPS 域名（例如 jk.example.com）： ' DOMAIN
+  read -r -p 'HTTPS 域名（例如 jk.example.com）： ' DOMAIN </dev/tty
   DOMAIN=${DOMAIN#http://}; DOMAIN=${DOMAIN#https://}; DOMAIN=${DOMAIN%/}
   [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$ ]] && break
   warn '域名格式不正确。'
@@ -70,7 +70,7 @@ echo
 echo "Komari：127.0.0.1:${PORT}"
 echo "面板：https://${DOMAIN}:${CADDY_HTTPS_PORT}"
 echo
-read -r -p '确认安装？[Y/n]: ' CONFIRM
+read -r -p '确认安装？[Y/n]: ' CONFIRM </dev/tty
 CONFIRM=${CONFIRM:-Y}
 [[ "$CONFIRM" =~ ^[Yy]$ ]] || exit 0
 
@@ -112,6 +112,13 @@ systemctl is-active --quiet komari || { journalctl -u komari -n 80 --no-pager; d
 ok "Komari 已启动：127.0.0.1:${PORT}"
 
 # 443 is reserved for VLESS Reality. Komari always uses Caddy on :2087.
+# Do not take over an already-running Caddy instance; this installer must not break other sites.
+if command -v caddy >/dev/null 2>&1 && systemctl is-active --quiet caddy 2>/dev/null; then
+  die '检测到 Caddy 已在运行。为避免覆盖现有网站配置，本安装器不会接管运行中的 Caddy；请先停用现有 Caddy 后再安装。'
+fi
+if ss -lnt 2>/dev/null | grep -Eq ':443[[:space:]]'; then
+  warn '检测到 TCP 443 已被占用。安装器不会修改 443；请确认该端口由 VLESS Reality 使用。'
+fi
 USE_NGINX=0
 WEB_SERVICE="caddy"
 if command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then USE_NGINX=1; fi
@@ -213,20 +220,20 @@ while true; do
  echo '12. 测试 HTTPS'
  echo ' 0. 退出'
  echo
- read -r -p '请选择 [0-12]: ' C
+ read -r -p '请选择 [0-12]: ' C </dev/tty
  case "\$C" in
-  1) systemctl status komari --no-pager -l; read -r -p '回车继续...' ;;
-  2) systemctl start komari; read -r -p '回车继续...' ;;
-  3) systemctl stop komari; read -r -p '回车继续...' ;;
-  4) systemctl restart komari; read -r -p '回车继续...' ;;
+  1) systemctl status komari --no-pager -l; read -r -p '回车继续...' </dev/tty ;;
+  2) systemctl start komari; read -r -p '回车继续...' </dev/tty ;;
+  3) systemctl stop komari; read -r -p '回车继续...' </dev/tty ;;
+  4) systemctl restart komari; read -r -p '回车继续...' </dev/tty ;;
   5) journalctl -u komari -f ;;
-  6) ss -lntp; read -r -p '回车继续...' ;;
-  7) systemctl status ${WEB_SERVICE} --no-pager -l; read -r -p '回车继续...' ;;
-  8) systemctl restart ${WEB_SERVICE}; read -r -p '回车继续...' ;;
+  6) ss -lntp; read -r -p '回车继续...' </dev/tty ;;
+  7) systemctl status ${WEB_SERVICE} --no-pager -l; read -r -p '回车继续...' </dev/tty ;;
+  8) systemctl restart ${WEB_SERVICE}; read -r -p '回车继续...' </dev/tty ;;
   9) journalctl -u ${WEB_SERVICE} -f ;;
- 10) cat /etc/systemd/system/komari.service; read -r -p '回车继续...' ;;
- 11) cat /etc/caddy/Caddyfile; if [[ '${USE_NGINX}' == 1 ]]; then echo; cat /etc/nginx/conf.d/komari-acme.conf; fi; read -r -p '回车继续...' ;;
- 12) curl -kI -L --max-time 15 https://${DOMAIN}:${CADDY_HTTPS_PORT} || true; read -r -p '回车继续...' ;;
+ 10) cat /etc/systemd/system/komari.service; read -r -p '回车继续...' </dev/tty ;;
+ 11) cat /etc/caddy/Caddyfile; if [[ '${USE_NGINX}' == 1 ]]; then echo; cat /etc/nginx/conf.d/komari-acme.conf; fi; read -r -p '回车继续...' </dev/tty ;;
+ 12) curl -kI -L --max-time 15 https://${DOMAIN}:${CADDY_HTTPS_PORT} || true; read -r -p '回车继续...' </dev/tty ;;
   0) exit 0 ;;
   *) echo '无效选项'; sleep 1 ;;
  esac
