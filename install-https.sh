@@ -62,7 +62,7 @@ fi
 while true; do
   read -r -p 'HTTPS 域名（例如 jk.example.com）： ' DOMAIN
   DOMAIN=${DOMAIN#http://}; DOMAIN=${DOMAIN#https://}; DOMAIN=${DOMAIN%/}
-  [[ "$DOMAIN" =~ ^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] && break
+  [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,63}$ ]] && break
   warn '域名格式不正确。'
 done
 
