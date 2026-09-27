@@ -11,6 +11,7 @@ DEFAULT_PORT=25774
 CADDY_HTTPS_PORT=2087
 PORT=""
 DOMAIN=""
+WEB_SERVICE="caddy"
 
 RED='\033[31m'; GREEN='\033[32m'; YELLOW='\033[33m'; CYAN='\033[36m'; NC='\033[0m'
 info(){ echo -e "${CYAN}[INFO]${NC} $*"; }
@@ -112,6 +113,7 @@ ok "Komari 已启动：127.0.0.1:${PORT}"
 
 # 443 is reserved for VLESS Reality. Komari always uses Caddy on :2087.
 USE_NGINX=0
+WEB_SERVICE="caddy"
 if command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null; then USE_NGINX=1; fi
 
 if (( USE_NGINX )); then
